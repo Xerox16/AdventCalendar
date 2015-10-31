@@ -14,7 +14,7 @@ endif
  
 
 LDFLAGS= -g -Wall
-LIBS= -lGL -lSDL -lSDL2_mixer -lGLEW
+LIBS= -lGL -lSDL -lSDL_mixer -lGLEW
 LDIR= -I/usr/include/SDL -I/usr/include/GLEW
 
 _DEPS=main.h
