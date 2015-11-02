@@ -6,8 +6,11 @@
 #include <iostream>
 #include <math.h>
 
+#include "../include/calendarreader.h"
+
 using std::cerr;
 using std::endl;
+using std::cout;
 
 SDL_Surface* display;
 
@@ -16,13 +19,13 @@ SDL_Surface* display;
 void init()
 {
     int i, j, pos;
-    for (i = 0; i < 640; i++)
+    for (i = 0; i < 1200; i++)
     {
         int p = (int)((sin((i + 3247) * 0.02) * 0.3 +
                        sin((i + 2347) * 0.04) * 0.1 +
-                       sin((i + 4378) * 0.01) * 0.6) * 100 + 380);
+                       sin((i + 4378) * 0.01) * 0.6) * 100 + 705);
         pos = p * PITCH + i;
-        for (j = p; j < 480; j++)
+        for (j = p; j < 805; j++)
         {
             ((unsigned int*)display->pixels)[pos] = 0x007f00;
             pos += PITCH;
@@ -34,24 +37,37 @@ void newsnow()
 {
     int i;
     for (i = 0; i < 8; i++)
-        ((unsigned int*)display->pixels)[rand() % 638 + 1] = 0xffffff;
+        ((unsigned int*)display->pixels)[rand() % 1198 + 1] = 0xffffff;
 }
 
 void snowfall()
 {
     int i, j;
     unsigned int *fb = (unsigned int*)display->pixels;
-    for (j = 478; j >= 0; j--)
+    for (j = 803; j >= 0; j--)
     {
         int ypos = j * PITCH;
-        for (i = 1; i < 639; i++)
+        for (i = 1; i < 1159; i++)
         {
             if (fb[ypos + i] == 0xffffff)
             {
                 if (fb[ypos + i + PITCH] == 0)
                 {
-                    fb[ypos + i + PITCH] = 0xffffff;
-                    fb[ypos + i] = 0;
+                    if (fb[ypos + i + PITCH] == 0)
+                    {
+                        fb[ypos + i + PITCH] = 0xffffff;
+                        fb[ypos + i] = 0;
+                    }
+                    else if (fb[ypos + i + PITCH - 1] == 0)
+                    {
+                        fb[ypos + i + PITCH - 1] = 0xffffff;
+                        fb[ypos + i] = 0;
+                    }
+                    else if (fb[ypos + i + PITCH + 1] == 0)
+                    {
+                        fb[ypos + i + PITCH + 1] = 0xffffff;
+                        fb[ypos + i] = 0;
+                    }
                 }
             }
         }
@@ -98,13 +114,13 @@ int main()
         exit(1);
     }
 
-    //Initialize SDL_mixer
+//Initialize SDL_mixer
     if( Mix_OpenAudio( 22050, AUDIO_S16SYS, 2, 2048 ) == -1 )
     {
         cerr << "Mix_OpenAudio() Failed: " << SDL_GetError() << endl;
         exit(1);
     }
-    // Set Volume
+// Set Volume
     Mix_VolumeMusic(50);
     // Play Music
     Mix_PlayMusic( music, 1 );
@@ -122,56 +138,106 @@ int main()
         }
     }
 
-        SDL_Event event;
-        while(1)
+//load content
+    std::ifstream file;
+    file.open("media/content.txt");
+    if(!file.is_open()) {
+        cerr << "Failed to open content file at '../media/content.txt'" << endl;
+        exit(1);
+    }
+
+    CalendarReader creader;
+    if(creader.read(file) != 0) {
+        cerr << "Failed to read content file" << endl;
+        exit(1);
+    }
+
+    cout<<"Content debug print:"<<endl;
+
+    for(int i = 0; i < 24; ++i) {
+        cout<<"Description "<<i<<" : "<<creader.getDescription(i)<<endl;
+        cout<<"Content: "<<creader.getContent(i)<<endl;
+    }
+
+    SDL_ShowCursor(SDL_ENABLE);
+
+    int activePanel = -1;
+
+    SDL_Event event;
+    while(1)
+    {
+        // Check for messages
+        if (SDL_PollEvent(&event))
         {
-            // Check for messages
-            if (SDL_PollEvent(&event))
+            // Check for the quit message
+            if (event.type == SDL_QUIT)
             {
-                // Check for the quit message
-                if (event.type == SDL_QUIT)
-                {
-                    // Quit the program
-                    break;
+                // Quit the program
+                break;
+            } else if(event.type == SDL_MOUSEBUTTONDOWN)
+            {
+                if(activePanel != -1) {
+                	cout<<"Panel "<<activePanel<<" closed!"<<endl;
+			activePanel = -1;
+                } else {
+                    int x, y;
+                    SDL_GetMouseState( &x,&y);
+
+                    for(int i = 0; i < 24; ++i) {
+			bool inside = true;
+                        if(x <  rectangles[i].x) 			inside = false;
+                        if(x > (rectangles[i].x + rectangles[i].w)) 	inside = false;
+                        if(y <  rectangles[i].y)			inside = false;
+                        if(y > (rectangles[i].y + rectangles[i].h))	inside = false;
+			if(inside) {
+				activePanel = i;
+				break;
+			}
+                    }
+
+                    cout<<"Panel activated? : "<<activePanel<<endl;
                 }
             }
-            // Game loop will go here...
-            // Apply the background to the display
-            if (SDL_BlitSurface(background, NULL, display, NULL) != 0)
-            {
-                cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
-                exit(1);
-            }
-
-            for(int i = 0; i < fields; ++i) {
-                SDL_FillRect(display, &rectangles[i], 0);
-            }
-
-            // Lock surface if needed
-            if (SDL_MUSTLOCK(display))
-                if (SDL_LockSurface(display) < 0)
-                    return -1;
-
-            // Ask SDL for the time in milliseconds
-            SDL_GetTicks();
-
-            newsnow();
-            snowfall();
-
-            // Unlock if needed
-            if (SDL_MUSTLOCK(display))
-                SDL_UnlockSurface(display);
-
-            //Update the display
-            SDL_Flip(display);
-
         }
-        Mix_FreeMusic( music );
-        Mix_CloseAudio();
+        // Game loop will go here...
+        // Apply the background to the display
+        if (SDL_BlitSurface(background, NULL, display, NULL) != 0)
+        {
+            cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
+            exit(1);
+        }/*
 
+         for(int i = 0; i < fields; ++i) {
+             SDL_FillRect(display, &rectangles[i], 0);
+         }*/
 
-        // Tell the SDL to clean up and shut down
-        SDL_Quit();
+        // Lock surface if needed
+        if (SDL_MUSTLOCK(display))
+            if (SDL_LockSurface(display) < 0)
+                return -1;
 
-        return 0;
+        // Ask SDL for the time in milliseconds
+        SDL_GetTicks();
+
+        newsnow();
+        snowfall();
+
+        // Unlock if needed
+        if (SDL_MUSTLOCK(display))
+            SDL_UnlockSurface(display);
+        SDL_UpdateRect(display, 0, 0, 1200, 805);
+        //Update the display
+        //SDL_Flip(display);
+
     }
+
+    file.close();
+    Mix_FreeMusic( music );
+    Mix_CloseAudio();
+
+
+    // Tell the SDL to clean up and shut down
+    SDL_Quit();
+
+    return 0;
+}
