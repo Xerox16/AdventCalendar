@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include <SDL.h>
 #include <SDL_mixer.h>
+#include <SDL_ttf.h>
 
 #include <chrono>
 #include <iostream>
@@ -16,7 +17,7 @@ SDL_Surface* display;
 
 #define PITCH (display->pitch / 4)
 
-void init()
+void initsnow()
 {
     int i, j, pos;
     for (i = 0; i < 1200; i++)
@@ -74,6 +75,24 @@ void snowfall()
     }
 }
 
+SDL_Surface* renderText(const std::string &message, TTF_Font* font,
+	SDL_Color color)
+{
+		
+	//We need to first render to a surface as that's what TTF_RenderText
+//	int w, h;
+//	TTF_SizeText(font, message.c_str(), &w, &h);
+	SDL_Surface *surf = TTF_RenderText_Blended(font, message.c_str(), color);
+	if (surf == nullptr){
+		cerr<<"Failed to render text"<<endl;
+		return  nullptr;
+	}
+	return surf;
+}
+
+//int blitText(SDL_Surface* text, SDL_Surface* dest, int x, int y) {
+	
+	
 
 int main()
 {
@@ -125,6 +144,25 @@ int main()
     // Play Music
     Mix_PlayMusic( music, 1 );
 
+//Init ttf and load font in two sizes
+
+    if(TTF_Init() != 0) {
+	cerr<<"TTF init failed: "<<SDL_GetError()<<endl;
+	exit(1);
+    }
+    //Open the font two times
+	TTF_Font *smallfont = TTF_OpenFont("media/font.ttf", 32);
+	TTF_Font *largefont = TTF_OpenFont("media/font.ttf", 64);
+	if (largefont == nullptr || smallfont == nullptr){
+		cerr<<"Failed to load fonts!"<<endl;
+		exit(1);
+	}	
+	
+	
+    SDL_Color color = { 255, 255, 255, 255 };
+    SDL_Surface* text = renderText("Hello World", largefont, color);
+
+    //setup rectangles for doors of the calendar
     int columns = 6, rows = 4, width = 190, height = 190, xOffset = 15, yOffset = 10, xDistance = 6, yDistance = 6;
     int fields = rows * columns;
 
@@ -205,7 +243,15 @@ int main()
         {
             cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
             exit(1);
-        }/*
+        }
+// Apply the text to the display
+      if (SDL_BlitSurface(text, NULL, display, NULL) != 0)
+      {
+         cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
+         break;
+      }		
+
+/*
 
          for(int i = 0; i < fields; ++i) {
              SDL_FillRect(display, &rectangles[i], 0);

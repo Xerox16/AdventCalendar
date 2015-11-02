@@ -11,7 +11,7 @@ endif
  
 ODIR=obj
 LDFLAGS= -g -Wall
-LIBS= -lGL -lSDL -lSDL_mixer -lGLEW
+LIBS= -lGL -lSDL -lSDL_mixer -lSDL_ttf -lGLEW
 LDIR= -I../include -I/usr/include/SDL -I/usr/include/GLEW
 IDIR= ../include
 
