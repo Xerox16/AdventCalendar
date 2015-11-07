@@ -6,16 +6,20 @@
 #include <chrono>
 #include <iostream>
 #include <math.h>
+#include <ctime>
+#include <sstream>
 
-#include "../include/calendarreader.h"
+#include "calendarreader.h"
+#include "printstring.h"
 
 using std::cerr;
 using std::endl;
 using std::cout;
 
 SDL_Surface* display;
+SDL_Surface* snow,* text;
 
-#define PITCH (display->pitch / 4)
+#define PITCH (snow->pitch / 4)
 
 void initsnow()
 {
@@ -28,7 +32,7 @@ void initsnow()
         pos = p * PITCH + i;
         for (j = p; j < 805; j++)
         {
-            ((unsigned int*)display->pixels)[pos] = 0x007f00;
+            ((unsigned int*)snow->pixels)[pos] = 0x007f00;
             pos += PITCH;
         }
     }
@@ -38,13 +42,13 @@ void newsnow()
 {
     int i;
     for (i = 0; i < 8; i++)
-        ((unsigned int*)display->pixels)[rand() % 1198 + 1] = 0xffffff;
+        ((unsigned int*)snow->pixels)[rand() % 1198 + 1] = 0xffffff;
 }
 
 void snowfall()
 {
     int i, j;
-    unsigned int *fb = (unsigned int*)display->pixels;
+    unsigned int *fb = (unsigned int*)snow->pixels;
     for (j = 803; j >= 0; j--)
     {
         int ypos = j * PITCH;
@@ -75,24 +79,33 @@ void snowfall()
     }
 }
 
-SDL_Surface* renderText(const std::string &message, TTF_Font* font,
-	SDL_Color color)
+SDL_Surface* createSurface( int width , int height )
 {
-		
-	//We need to first render to a surface as that's what TTF_RenderText
-//	int w, h;
-//	TTF_SizeText(font, message.c_str(), &w, &h);
-	SDL_Surface *surf = TTF_RenderText_Blended(font, message.c_str(), color);
-	if (surf == nullptr){
-		cerr<<"Failed to render text"<<endl;
-		return  nullptr;
-	}
-	return surf;
-}
+    uint32_t rmask , gmask , bmask , amask ;
 
-//int blitText(SDL_Surface* text, SDL_Surface* dest, int x, int y) {
-	
-	
+    /* SDL interprets each pixel as a 32-bit number, so our masks must depend
+       on the endianness (byte order) of the machine */
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+    rmask = 0xff000000;
+    gmask = 0x00ff0000;
+    bmask = 0x0000ff00;
+    amask = 0x00000000;
+#else
+    rmask = 0x000000ff;
+    gmask = 0x0000ff00;
+    bmask = 0x00ff0000;
+    amask = 0x00000000;
+#endif
+
+    SDL_Surface* surface = SDL_CreateRGBSurface( 0 , width , height , 32 , rmask , gmask , bmask , amask ) ;
+    if( surface == NULL )
+    {
+        ( void )fprintf(stderr, "CreateRGBSurface failed: %s\n", SDL_GetError() );
+        exit(1);
+    }
+
+    return surface ;
+}
 
 int main()
 {
@@ -111,18 +124,58 @@ int main()
         exit(1);
     }
 
+//Get time for calendar functionality and for setting according title
+    std::time_t currentTime = std::time(nullptr);
+    struct std::tm * now = localtime(&currentTime);
+    int month = now->tm_mon + 1, date = now->tm_mday - 1;
+    month = 12;
+    std::stringstream title;
+    title << "Calendrier de l'Advent: " << now->tm_mday << ". " << month << " --> Encore " << 24 - now->tm_mday + (12 - month) * 31<<" jours jusqu'a Noel!";
+
 // Set the title bar
-    SDL_WM_SetCaption("Adventskalendar", "Adventskalendar");
+    SDL_WM_SetCaption(title.str().c_str(), title.str().c_str());
 
 // Load the background and the door
-    SDL_Surface* background,* door;
+    SDL_Surface* background,* door,* lockTemp,* lock;
     background = SDL_LoadBMP("media/kalender.bmp");
     door       = SDL_LoadBMP("media/background.bmp");
-    if (background == NULL || door == NULL)
+    lockTemp   = SDL_LoadBMP("media/lock.bmp");
+    if (background == NULL || door == NULL || lockTemp == NULL)
     {
         cerr << "SDL_LoadBMP() Failed: " << SDL_GetError() << endl;
         exit(1);
     }
+//Setup rectangles for doors of the calendar
+    int columns = 6, rows = 4, width = 190, height = 190, xOffset = 15, yOffset = 10, xDistance = 6, yDistance = 6;
+    int fields = rows * columns;
+
+    SDL_Rect rectangles[fields];
+    for(int y = 0; y < rows; ++y) {
+        for(int x = 0; x < columns; ++x) {
+            rectangles[y * columns + x].w = width;
+            rectangles[y * columns + x].h = height;
+            rectangles[y * columns + x].x = xOffset + (width + xDistance) * x;
+            rectangles[y * columns + x].y = yOffset + (height+ yDistance) * y;
+        }
+    }
+
+
+//Set colorkey so that lock does not cover the doors
+   SDL_SetAlpha(lockTemp, 0, 0);
+   Uint32 colorkey = SDL_MapRGB(display->format, 255, 0, 255);
+   SDL_SetColorKey(lockTemp, SDL_SRCCOLORKEY, colorkey);
+
+    lock = createSurface(190,190);
+    SDL_SetColorKey(lock, SDL_SRCCOLORKEY, colorkey);
+    SDL_BlitSurface(lockTemp, NULL, lock, NULL);
+
+//Draw locks on background
+    for(int i = (month != 12 ? 0 : now->tm_mday); i < 24 ; ++i) {
+        SDL_BlitSurface(lock, NULL, background, &rectangles[i]);
+    }
+    
+    SDL_FreeSurface(lockTemp);
+    SDL_FreeSurface(lock);
 
 // Load the sound file
     Mix_Music *music;
@@ -139,44 +192,38 @@ int main()
         cerr << "Mix_OpenAudio() Failed: " << SDL_GetError() << endl;
         exit(1);
     }
+
 // Set Volume
     Mix_VolumeMusic(50);
-    // Play Music
-    Mix_PlayMusic( music, 1 );
+// Play Music
+//    Mix_PlayMusic( music, 1 );
 
 //Init ttf and load font in two sizes
-
     if(TTF_Init() != 0) {
-	cerr<<"TTF init failed: "<<SDL_GetError()<<endl;
-	exit(1);
-    }
-    //Open the font two times
-	TTF_Font *smallfont = TTF_OpenFont("media/font.ttf", 32);
-	TTF_Font *largefont = TTF_OpenFont("media/font.ttf", 64);
-	if (largefont == nullptr || smallfont == nullptr){
-		cerr<<"Failed to load fonts!"<<endl;
-		exit(1);
-	}	
-	
-	
-    SDL_Color color = { 255, 255, 255, 255 };
-    SDL_Surface* text = renderText("Hello World", largefont, color);
-
-    //setup rectangles for doors of the calendar
-    int columns = 6, rows = 4, width = 190, height = 190, xOffset = 15, yOffset = 10, xDistance = 6, yDistance = 6;
-    int fields = rows * columns;
-
-    SDL_Rect rectangles[fields];
-    for(int y = 0; y < rows; ++y) {
-        for(int x = 0; x < columns; ++x) {
-            rectangles[y * columns + x].w = width;
-            rectangles[y * columns + x].h = height;
-            rectangles[y * columns + x].x = xOffset + (width + xDistance) * x;
-            rectangles[y * columns + x].y = yOffset + (height+ yDistance) * y;
-        }
+        cerr<<"TTF init failed: "<<SDL_GetError()<<endl;
+        exit(1);
     }
 
-//load content
+//Open the font two times
+    TTF_Font *smallfont = TTF_OpenFont("media/font.ttf", 32);
+    TTF_Font *largefont = TTF_OpenFont("media/font.ttf", 48);
+    if (largefont == nullptr || smallfont == nullptr) {
+        cerr<<"Failed to load fonts!"<<endl;
+        exit(1);
+    }
+
+
+//Set rectangle and color for panel
+    SDL_Rect panelRect   = {150,100,900,600};
+    SDL_Rect textRect    = {30,30,840,540};
+    Uint32 panelColorI   = SDL_MapRGB(display->format, 255, 255, 255);
+    SDL_Color panelColor = {255, 255, 255, 0};
+
+//Set rectangle and color for text
+    SDL_Color textColor = { 55, 55, 55, 0 };
+
+
+//Load content
     std::ifstream file;
     file.open("media/content.txt");
     if(!file.is_open()) {
@@ -197,6 +244,17 @@ int main()
         cout<<"Content: "<<creader.getContent(i)<<endl;
     }
 
+//Create semi-transparent snow and text surface
+    snow = createSurface(1200,805);
+    SDL_SetAlpha(snow, SDL_SRCALPHA , 128);
+    SDL_SetColorKey(snow, SDL_SRCCOLORKEY, colorkey);
+
+    text = createSurface(900, 600);
+    SDL_SetAlpha(text, SDL_SRCALPHA, 200);
+    SDL_FillRect(text, NULL, SDL_MapRGB(text->format, 255, 255, 255));
+
+
+//Enable Cursor
     SDL_ShowCursor(SDL_ENABLE);
 
     int activePanel = -1;
@@ -204,85 +262,101 @@ int main()
     SDL_Event event;
     while(1)
     {
-        // Check for messages
+// Check for messages
         if (SDL_PollEvent(&event))
         {
-            // Check for the quit message
+// Check for the quit message
             if (event.type == SDL_QUIT)
             {
-                // Quit the program
+// Quit the program
                 break;
             } else if(event.type == SDL_MOUSEBUTTONDOWN)
             {
                 if(activePanel != -1) {
-                	cout<<"Panel "<<activePanel<<" closed!"<<endl;
-			activePanel = -1;
+                    cout<<"Panel "<<activePanel<<" closed!"<<endl;
+                    activePanel = -1;
                 } else {
                     int x, y;
                     SDL_GetMouseState( &x,&y);
 
                     for(int i = 0; i < 24; ++i) {
-			bool inside = true;
-                        if(x <  rectangles[i].x) 			inside = false;
-                        if(x > (rectangles[i].x + rectangles[i].w)) 	inside = false;
-                        if(y <  rectangles[i].y)			inside = false;
-                        if(y > (rectangles[i].y + rectangles[i].h))	inside = false;
-			if(inside) {
-				activePanel = i;
-				break;
-			}
+                        bool inside = true;
+                        if(x <  rectangles[i].x)                        inside = false;
+                        if(x > (rectangles[i].x + rectangles[i].w))     inside = false;
+                        if(y <  rectangles[i].y)                        inside = false;
+                        if(y > (rectangles[i].y + rectangles[i].h))     inside = false;
+                        if(month != 12 || i > date)                     inside = false;
+
+
+                        if(inside) {
+                            activePanel = i;
+                            break;
+                        }
                     }
 
                     cout<<"Panel activated? : "<<activePanel<<endl;
                 }
             }
         }
-        // Game loop will go here...
-        // Apply the background to the display
+// Reset snow surface
+        SDL_FillRect(snow, NULL, SDL_MapRGB(display->format, 255,0,255));
+
+// Lock surface if needed
+        if (SDL_MUSTLOCK(snow))
+            if (SDL_LockSurface(snow) < 0)
+                return -1;
+
+        newsnow();
+        snowfall();
+
+// Unlock if needed
+        if (SDL_MUSTLOCK(snow))
+            SDL_UnlockSurface(snow);
+
+// Apply the background to the display
         if (SDL_BlitSurface(background, NULL, display, NULL) != 0)
         {
             cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
             exit(1);
         }
+// Apply snowfall to the display
+        if(SDL_BlitSurface(snow, NULL, display, NULL) != 0)
+        {
+            cerr << "SDL_BlitSurface() Failed: " <<SDL_GetError() << endl;
+            exit(1);
+        }
+
+
+        if (activePanel != -1) {
+        printString(text, largefont, creader.getDescription(activePanel) + "++" + creader.getContent(activePanel), textRect, textColor, panelColor, 0);
+             
 // Apply the text to the display
-      if (SDL_BlitSurface(text, NULL, display, NULL) != 0)
-      {
-         cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
-         break;
-      }		
+            if (SDL_BlitSurface(text, NULL, display, &panelRect) != 0)
+            {
+                cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
+                break;
+            }
+            
+           }
 
-/*
 
-         for(int i = 0; i < fields; ++i) {
-             SDL_FillRect(display, &rectangles[i], 0);
-         }*/
 
-        // Lock surface if needed
-        if (SDL_MUSTLOCK(display))
-            if (SDL_LockSurface(display) < 0)
-                return -1;
 
-        // Ask SDL for the time in milliseconds
-        SDL_GetTicks();
-
-        newsnow();
-        snowfall();
-
-        // Unlock if needed
-        if (SDL_MUSTLOCK(display))
-            SDL_UnlockSurface(display);
-        SDL_UpdateRect(display, 0, 0, 1200, 805);
-        //Update the display
-        //SDL_Flip(display);
-
+        SDL_Flip(display);
     }
 
     file.close();
     Mix_FreeMusic( music );
     Mix_CloseAudio();
+    
+    SDL_FreeSurface(text);
+    SDL_FreeSurface(background);
+    SDL_FreeSurface(snow);
 
+    TTF_CloseFont(smallfont);
+    TTF_CloseFont(largefont);
 
-    // Tell the SDL to clean up and shut down
+// Tell the SDL to clean up and shut down
     SDL_Quit();
 
     return 0;

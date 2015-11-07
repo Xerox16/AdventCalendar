@@ -73,7 +73,7 @@ SDL_Surface* printString( SDL_Surface *dest, TTF_Font *font,
 
     std::string strSub;
 
-    n = str.find( '\n', 0 );
+    n = str.find( "+", 0 );
 
     strSub = str.substr( 0,n );
 
@@ -125,7 +125,7 @@ SDL_Surface* printString( SDL_Surface *dest, TTF_Font *font,
 
       dest = SDL_CreateRGBSurface( SDL_SWSURFACE, width,
 
-          height, 32, 0,0,0,0 );
+          height, 32, 255,255,255,0 );
 
     } else {
 

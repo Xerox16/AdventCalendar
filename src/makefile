@@ -4,7 +4,7 @@ LINK_TARGET = ../opengl.exe
 DEBUG = yes
 
 ifeq ($(DEBUG),yes)
-	CXXFLAGS=-I$(IDIR) -g -Wall -ansi -Wextra -O2 -Werror -std=c++11
+	CXXFLAGS=-I$(IDIR) -g -Wall -ansi -Wextra -O2 -std=c++11
 else 
 	CXXFLAGS=-I$(IDIR) -Os
 endif
@@ -15,7 +15,7 @@ LIBS= -lGL -lSDL -lSDL_mixer -lSDL_ttf -lGLEW
 LDIR= -I../include -I/usr/include/SDL -I/usr/include/GLEW
 IDIR= ../include
 
-_DEPS=main.h calendarreader.h
+_DEPS=main.h calendarreader.h printstring.h
 DEPS=$(patsubst %,$(IDIR)/%,$(_DEPS))
 
 _OBJ=main.o calendarreader.o
