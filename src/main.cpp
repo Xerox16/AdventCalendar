@@ -16,8 +16,7 @@ using std::cerr;
 using std::endl;
 using std::cout;
 
-SDL_Surface* display;
-SDL_Surface* snow,* text;
+SDL_Surface* display,* snow,* text,* background;
 
 #define PITCH (snow->pitch / 4)
 
@@ -126,7 +125,7 @@ int main()
 
 //Get time for calendar functionality and for setting according title
     std::time_t currentTime = std::time(nullptr);
-    struct std::tm * now = localtime(&currentTime);
+    struct std::tm* now = localtime(&currentTime);
     int month = now->tm_mon + 1, date = now->tm_mday - 1;
     month = 12;
     std::stringstream title;
@@ -136,11 +135,11 @@ int main()
     SDL_WM_SetCaption(title.str().c_str(), title.str().c_str());
 
 // Load the background and the door
-    SDL_Surface* background,* door,* lockTemp,* lock;
     background = SDL_LoadBMP("media/kalender.bmp");
-    door       = SDL_LoadBMP("media/background.bmp");
-    lockTemp   = SDL_LoadBMP("media/lock.bmp");
-    if (background == NULL || door == NULL || lockTemp == NULL)
+
+    SDL_Surface* starTemp   = SDL_LoadBMP("media/star.bmp");
+    SDL_Surface* lockTemp   = SDL_LoadBMP("media/lock.bmp");
+    if (background == NULL || lockTemp == NULL || starTemp == NULL)
     {
         cerr << "SDL_LoadBMP() Failed: " << SDL_GetError() << endl;
         exit(1);
@@ -161,21 +160,35 @@ int main()
 
 
 //Set colorkey so that lock does not cover the doors
-   SDL_SetAlpha(lockTemp, 0, 0);
-   Uint32 colorkey = SDL_MapRGB(display->format, 255, 0, 255);
-   SDL_SetColorKey(lockTemp, SDL_SRCCOLORKEY, colorkey);
+    SDL_SetAlpha(lockTemp, 0, 0);
+    Uint32 colorkey = SDL_MapRGB(display->format, 255, 0, 255);
+    SDL_SetColorKey(lockTemp, SDL_SRCCOLORKEY, colorkey);
 
-    lock = createSurface(190,190);
+    SDL_Surface* lock = createSurface(width, height);
     SDL_SetColorKey(lock, SDL_SRCCOLORKEY, colorkey);
     SDL_BlitSurface(lockTemp, NULL, lock, NULL);
 
-//Draw locks on background
+    SDL_SetAlpha(starTemp, 0, 0);
+    SDL_SetColorKey(starTemp, SDL_SRCCOLORKEY, colorkey);
+
+    SDL_Surface* star = createSurface(width, height);
+    SDL_SetColorKey(star, SDL_SRCCOLORKEY, colorkey);
+    SDL_BlitSurface(starTemp, NULL, star, NULL);
+    SDL_SetAlpha(star, SDL_SRCALPHA, 128);
+
+//Draw locks and star on background
     for(int i = (month != 12 ? 0 : now->tm_mday); i < 24 ; ++i) {
         SDL_BlitSurface(lock, NULL, background, &rectangles[i]);
     }
-    
+
+    if(month == 12 && now->tm_mday <= 24) {
+        SDL_BlitSurface(star, NULL, background, &rectangles[date]);
+    }
+
     SDL_FreeSurface(lockTemp);
     SDL_FreeSurface(lock);
+    SDL_FreeSurface(starTemp);
+    SDL_FreeSurface(star);
 
 // Load the sound file
     Mix_Music *music;
@@ -216,7 +229,6 @@ int main()
 //Set rectangle and color for panel
     SDL_Rect panelRect   = {150,100,900,600};
     SDL_Rect textRect    = {30,30,840,540};
-    Uint32 panelColorI   = SDL_MapRGB(display->format, 255, 255, 255);
     SDL_Color panelColor = {255, 255, 255, 0};
 
 //Set rectangle and color for text
@@ -298,8 +310,9 @@ int main()
                 }
             }
         }
-// Reset snow surface
-        SDL_FillRect(snow, NULL, SDL_MapRGB(display->format, 255,0,255));
+// Reset snow and text surface
+        SDL_FillRect(snow, NULL, SDL_MapRGB(display->format, 255,0  ,255));
+        SDL_FillRect(text, NULL, SDL_MapRGB(display->format, 255,255,255));
 
 // Lock surface if needed
         if (SDL_MUSTLOCK(snow))
@@ -328,16 +341,17 @@ int main()
 
 
         if (activePanel != -1) {
-        printString(text, largefont, creader.getDescription(activePanel) + "++" + creader.getContent(activePanel), textRect, textColor, panelColor, 0);
-             
+// Print text to text surface
+            printString(text, largefont, creader.getDescription(activePanel) + "++" + creader.getContent(activePanel), textRect, textColor, panelColor, 0);
+
 // Apply the text to the display
             if (SDL_BlitSurface(text, NULL, display, &panelRect) != 0)
             {
                 cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
                 break;
             }
-            
-           }
+
+        }
 
 
 
@@ -345,10 +359,12 @@ int main()
         SDL_Flip(display);
     }
 
+//Clean Up
     file.close();
+
     Mix_FreeMusic( music );
     Mix_CloseAudio();
-    
+
     SDL_FreeSurface(text);
     SDL_FreeSurface(background);
     SDL_FreeSurface(snow);
