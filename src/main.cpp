@@ -16,8 +16,10 @@ using std::cerr;
 using std::endl;
 using std::cout;
 
+// Declare surfaces to free later
 SDL_Surface* display,* snow,* text,* background;
 
+// Define snow functions
 #define PITCH (snow->pitch / 4)
 
 void initsnow()
@@ -51,7 +53,7 @@ void snowfall()
     for (j = 803; j >= 0; j--)
     {
         int ypos = j * PITCH;
-        for (i = 1; i < 1159; i++)
+        for (i = 1; i < 1199; i++)
         {
             if (fb[ypos + i] == 0xffffff)
             {
@@ -78,6 +80,7 @@ void snowfall()
     }
 }
 
+// Create an SDL surface easily
 SDL_Surface* createSurface( int width , int height )
 {
     uint32_t rmask , gmask , bmask , amask ;
@@ -99,23 +102,51 @@ SDL_Surface* createSurface( int width , int height )
     SDL_Surface* surface = SDL_CreateRGBSurface( 0 , width , height , 32 , rmask , gmask , bmask , amask ) ;
     if( surface == NULL )
     {
-        ( void )fprintf(stderr, "CreateRGBSurface failed: %s\n", SDL_GetError() );
+        cerr << "CreateRGBSurface failed: "<< SDL_GetError() << endl;
         exit(1);
     }
 
     return surface ;
 }
 
-int main()
+void loadConfig(CalendarReader& creader) {
+//Reset CalendarReader
+    creader.reset();
+
+//Load content
+    std::ifstream file;
+    file.open("media/content.txt");
+    if(!file.is_open()) {
+        cerr << "Failed to open content file at '../media/content.txt'" << endl;
+        exit(1);
+    }
+
+    if(creader.read(file) != 0) {
+        cerr << "Failed to read content file" << endl;
+        exit(1);
+    }
+
+    file.close();
+
+    cout<<"Content debug print:"<<endl;
+
+    for(int i = 0; i < 24; ++i) {
+        cout<<"Description "<<i<<" : "<<creader.getDescription(i)<<endl;
+        cout<<"Content: "<<creader.getContent(i)<<endl;
+    }
+}
+
+
+int main(int argc, char** argv)
 {
-    // Initialize the SDL
+//Initialize the SDL
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
     {
         cerr << "SDL_Init() Failed: " << SDL_GetError() << endl;
         exit(1);
     }
 
-// Set the video mode
+//Set the video mode
     display = SDL_SetVideoMode(1200, 805, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
     if (display == NULL)
     {
@@ -126,17 +157,28 @@ int main()
 //Get time for calendar functionality and for setting according title
     std::time_t currentTime = std::time(nullptr);
     struct std::tm* now = localtime(&currentTime);
-    int month = now->tm_mon + 1, date = now->tm_mday - 1;
-    month = 12;
+//Definition of buffer variablesnow->tm_mon from 0-11, nom->tm_mday from 1-31; month from 1-12, day from 0-30
+    int month = now->tm_mon + 1, day = now->tm_mday - 1;
+
+//Debug with custom date
+    if(argc == 3) {
+        day    = atoi(argv[1]) - 1;
+        month  = atoi(argv[2]);
+    }
+
     std::stringstream title;
-    title << "Calendrier de l'Advent: " << now->tm_mday << ". " << month << " --> Encore " << 24 - now->tm_mday + (12 - month) * 31<<" jours jusqu'a Noel!";
+    title << "Calendrier de l'Advent: " << (day + 1) << ". " << month << " --> ";
+    if(day > 23 && month != 11) {
+        title << "Noel est deja passe!";
+    } else {
+        title << "Encore " << 24 - (day + 1) + (12 - month) * 31<<" jours jusqu'a Noel!";
+    }
 
 // Set the title bar
     SDL_WM_SetCaption(title.str().c_str(), title.str().c_str());
 
-// Load the background and the door
-    background = SDL_LoadBMP("media/kalender.bmp");
-
+// Load the background, lock and star
+    background              = SDL_LoadBMP("media/kalender.bmp");
     SDL_Surface* starTemp   = SDL_LoadBMP("media/star.bmp");
     SDL_Surface* lockTemp   = SDL_LoadBMP("media/lock.bmp");
     if (background == NULL || lockTemp == NULL || starTemp == NULL)
@@ -144,7 +186,8 @@ int main()
         cerr << "SDL_LoadBMP() Failed: " << SDL_GetError() << endl;
         exit(1);
     }
-//Setup rectangles for doors of the calendar
+
+// Setup rectangles for doors of the calendar
     int columns = 6, rows = 4, width = 190, height = 190, xOffset = 15, yOffset = 10, xDistance = 6, yDistance = 6;
     int fields = rows * columns;
 
@@ -174,15 +217,15 @@ int main()
     SDL_Surface* star = createSurface(width, height);
     SDL_SetColorKey(star, SDL_SRCCOLORKEY, colorkey);
     SDL_BlitSurface(starTemp, NULL, star, NULL);
-    SDL_SetAlpha(star, SDL_SRCALPHA, 128);
+    SDL_SetAlpha(star, SDL_SRCALPHA, 224);
 
 //Draw locks and star on background
-    for(int i = (month != 12 ? 0 : now->tm_mday); i < 24 ; ++i) {
+    for(int i = (month != 12 ? 0 : (day + 1)); i < 24 ; ++i) {
         SDL_BlitSurface(lock, NULL, background, &rectangles[i]);
     }
 
-    if(month == 12 && now->tm_mday <= 24) {
-        SDL_BlitSurface(star, NULL, background, &rectangles[date]);
+    if(month == 12 && (day + 1) <= 24) {
+        SDL_BlitSurface(star, NULL, background, &rectangles[day]);
     }
 
     SDL_FreeSurface(lockTemp);
@@ -209,7 +252,7 @@ int main()
 // Set Volume
     Mix_VolumeMusic(50);
 // Play Music
-//    Mix_PlayMusic( music, 1 );
+    Mix_PlayMusic( music, 1 );
 
 //Init ttf and load font in two sizes
     if(TTF_Init() != 0) {
@@ -234,56 +277,39 @@ int main()
 //Set rectangle and color for text
     SDL_Color textColor = { 55, 55, 55, 0 };
 
-
-//Load content
-    std::ifstream file;
-    file.open("media/content.txt");
-    if(!file.is_open()) {
-        cerr << "Failed to open content file at '../media/content.txt'" << endl;
-        exit(1);
-    }
-
+//Load config file for the first time
     CalendarReader creader;
-    if(creader.read(file) != 0) {
-        cerr << "Failed to read content file" << endl;
-        exit(1);
-    }
-
-    cout<<"Content debug print:"<<endl;
-
-    for(int i = 0; i < 24; ++i) {
-        cout<<"Description "<<i<<" : "<<creader.getDescription(i)<<endl;
-        cout<<"Content: "<<creader.getContent(i)<<endl;
-    }
+    loadConfig(creader);
 
 //Create semi-transparent snow and text surface
     snow = createSurface(1200,805);
-    SDL_SetAlpha(snow, SDL_SRCALPHA , 128);
-    SDL_SetColorKey(snow, SDL_SRCCOLORKEY, colorkey);
+    SDL_SetAlpha(snow,0,0);
+    int black = SDL_MapRGB(snow->format, 0, 0, 0);
+    SDL_SetColorKey(snow, SDL_SRCCOLORKEY, black);
+    SDL_FillRect(snow, NULL, black);
 
     text = createSurface(900, 600);
-    SDL_SetAlpha(text, SDL_SRCALPHA, 200);
+    SDL_SetAlpha(text, SDL_SRCALPHA, 224);
     SDL_FillRect(text, NULL, SDL_MapRGB(text->format, 255, 255, 255));
 
 
 //Enable Cursor
     SDL_ShowCursor(SDL_ENABLE);
-
+//Define active Panel
     int activePanel = -1;
 
     SDL_Event event;
     while(1)
     {
-// Check for messages
+//Check for messages
         if (SDL_PollEvent(&event))
         {
-// Check for the quit message
+//Check for the quit message
             if (event.type == SDL_QUIT)
             {
-// Quit the program
+//Quit the program
                 break;
-            } else if(event.type == SDL_MOUSEBUTTONDOWN)
-            {
+            } else if(event.type == SDL_MOUSEBUTTONDOWN) {
                 if(activePanel != -1) {
                     cout<<"Panel "<<activePanel<<" closed!"<<endl;
                     activePanel = -1;
@@ -297,8 +323,7 @@ int main()
                         if(x > (rectangles[i].x + rectangles[i].w))     inside = false;
                         if(y <  rectangles[i].y)                        inside = false;
                         if(y > (rectangles[i].y + rectangles[i].h))     inside = false;
-                        if(month != 12 || i > date)                     inside = false;
-
+                        if(month != 12 || i > day)                      inside = false;
 
                         if(inside) {
                             activePanel = i;
@@ -308,13 +333,17 @@ int main()
 
                     cout<<"Panel activated? : "<<activePanel<<endl;
                 }
+            } else if(event.type == SDL_KEYDOWN) {
+                if(event.key.keysym.sym == SDLK_UP) {
+                    loadConfig(creader);
+                }
             }
         }
-// Reset snow and text surface
-        SDL_FillRect(snow, NULL, SDL_MapRGB(display->format, 255,0  ,255));
+
+//Reset snow and text surface
         SDL_FillRect(text, NULL, SDL_MapRGB(display->format, 255,255,255));
 
-// Lock surface if needed
+//Lock surface if needed
         if (SDL_MUSTLOCK(snow))
             if (SDL_LockSurface(snow) < 0)
                 return -1;
@@ -322,17 +351,17 @@ int main()
         newsnow();
         snowfall();
 
-// Unlock if needed
+//Unlock if needed
         if (SDL_MUSTLOCK(snow))
             SDL_UnlockSurface(snow);
 
-// Apply the background to the display
+//Apply the background to the display
         if (SDL_BlitSurface(background, NULL, display, NULL) != 0)
         {
             cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
             exit(1);
         }
-// Apply snowfall to the display
+//Apply snowfall to the display
         if(SDL_BlitSurface(snow, NULL, display, NULL) != 0)
         {
             cerr << "SDL_BlitSurface() Failed: " <<SDL_GetError() << endl;
@@ -341,10 +370,10 @@ int main()
 
 
         if (activePanel != -1) {
-// Print text to text surface
+//Print text to text surface
             printString(text, largefont, creader.getDescription(activePanel) + "++" + creader.getContent(activePanel), textRect, textColor, panelColor, 0);
 
-// Apply the text to the display
+//Apply the text to the display
             if (SDL_BlitSurface(text, NULL, display, &panelRect) != 0)
             {
                 cerr << "SDL_BlitSurface() Failed: " << SDL_GetError() << endl;
@@ -354,14 +383,10 @@ int main()
         }
 
 
-
-
         SDL_Flip(display);
     }
 
 //Clean Up
-    file.close();
-
     Mix_FreeMusic( music );
     Mix_CloseAudio();
 
@@ -372,7 +397,7 @@ int main()
     TTF_CloseFont(smallfont);
     TTF_CloseFont(largefont);
 
-// Tell the SDL to clean up and shut down
+//Tell the SDL to clean up and shut down
     SDL_Quit();
 
     return 0;

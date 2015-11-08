@@ -10,6 +10,7 @@ public:
 	CalendarReader();
 	~CalendarReader();
 	int read(std::ifstream& istream);
+    void reset();
 	const std::string& getDescription(int day);
 	const std::string& getContent(int day);
 

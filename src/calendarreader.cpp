@@ -31,6 +31,11 @@ int CalendarReader::read(std::ifstream& istream) {
 	return 0;
 }
 
+void CalendarReader::reset() {
+    descriptions_.clear();
+    contents_.clear();
+}
+
 const std::string& CalendarReader::getDescription(int day) {
 	return descriptions_.at(day);
 }
